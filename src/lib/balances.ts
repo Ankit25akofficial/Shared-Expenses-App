@@ -42,7 +42,31 @@ export interface GroupBalancesResult {
 
 /**
  * Calculates explanation ledgers and simplified debts for all members of a group.
- * All math is processed in BigInt subunits and converted to floating-point numbers at the boundary.
+ * All math is processed in BigInt subunits (cents/paise) and converted to floating-point numbers at the boundary
+ * to prevent IEEE 754 precision issues during arithmetic operations.
+ * 
+ * Algorithmic steps:
+ * 1. Fetch group members, active expenses, and settlements.
+ * 2. Initialize a Ledger schema for each participant per currency.
+ * 3. Aggregate all paid and owed amounts from expenses, and populate transaction audit trails.
+ * 4. Aggregate all sent and received settlements.
+ * 5. Compute net balances: Net = (Paid - Owed) + (Sent - Received).
+ * 6. Apply the Greedy Netting Debt Simplification Algorithm:
+ *    - Split members into Debtors (Net < 0) and Creditors (Net > 0).
+ *    - Sort Debtors ascending (most negative first) and Creditors descending (most positive first).
+ *    - Match the largest debtor with the largest creditor.
+ *    - Clear as much balance as possible: settleAmount = min(|debtor.net|, creditor.net).
+ *    - Create simplified debt relation, update balances, and shift users who reach zero net balance.
+ *    - Repeat until all debts are simplified.
+ * 
+ * Complexity:
+ * - Sorting is performed on at most N elements (N = number of active group members).
+ * - The while-loop runs at most N-1 times (as each iteration resolves at least one member's balance to zero).
+ * - Overall Time Complexity: O(N log N) due to sorting in each loop iteration.
+ * - Space Complexity: O(N + E + S) where E is expenses and S is settlements to construct the ledger trail.
+ * 
+ * @param groupId - The UUID of the group to calculate balances for
+ * @returns A promise resolving to a CurrencyBalanceSummary map categorized by currency code
  */
 export async function calculateGroupBalances(groupId: string): Promise<GroupBalancesResult> {
   // 1. Fetch group members
