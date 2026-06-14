@@ -7,11 +7,15 @@ import { createAuditLog } from '@/lib/audit';
 import { calculateGroupBalances } from '@/lib/balances';
 import { AuditAction } from '@prisma/client';
 
+import { isValidCurrencyCode } from '@/lib/currency';
+
 const createSettlementSchema = z.object({
   payerId: z.string(),
   payeeId: z.string(),
   amount: z.number().positive('Settlement amount must be positive'),
-  currency: z.string().min(3).max(3),
+  currency: z.string().refine(val => isValidCurrencyCode(val), {
+    message: 'Unsupported currency code. Supported currencies: INR, USD, EUR, GBP',
+  }),
   date: z.string().datetime().optional().nullable(),
 });
 

@@ -6,6 +6,7 @@ import prisma from '@/lib/prisma';
 import { calculateSplits } from '@/lib/splits';
 import { createAuditLog } from '@/lib/audit';
 import { AuditAction, SplitType } from '@prisma/client';
+import { isValidCurrencyCode } from '@/lib/currency';
 
 const participantSchema = z.object({
   userId: z.string(),
@@ -15,7 +16,9 @@ const participantSchema = z.object({
 const createExpenseSchema = z.object({
   description: z.string().min(1, 'Description is required').max(255),
   amount: z.number().positive('Amount must be positive'),
-  currency: z.string().min(3).max(3),
+  currency: z.string().refine(val => isValidCurrencyCode(val), {
+    message: 'Unsupported currency code. Supported currencies: INR, USD, EUR, GBP',
+  }),
   date: z.string().datetime(), // ISO 8601 string
   payerId: z.string(),
   splitType: z.nativeEnum(SplitType),
