@@ -12,8 +12,16 @@ interface CalculatedSplit {
 }
 
 /**
- * Calculates exact integer split liabilities based on split type.
- * All amount inputs and outputs are in integer subunits (paise/cents).
+ * Calculates exact integer split liabilities based on the requested split type.
+ * All amount parameters and returns are computed in integer subunits (paise/cents).
+ * 
+ * Remainder handling: If division results in a remainder, it is distributed
+ * cent-by-cent deterministically to the first participants ordered alphabetically by userId.
+ * 
+ * @param totalAmount - Total expense amount in subunit representation
+ * @param splitType - The type of splitting mechanism (EQUAL, UNEQUAL, PERCENTAGE, SHARES)
+ * @param participants - List of participants with their input split values
+ * @returns Array of calculated shares for each participant
  */
 export function calculateSplits(
   totalAmount: bigint,
