@@ -154,5 +154,21 @@ Since Prisma is used, you must synchronize your production database:
 
 ---
 
+## 📂 Assignment Documentation
+
+The following files contain detailed audits, decision trees, logs, and metadata required for the project submission:
+
+1.  **[SCOPE.md](file:///c:/Build%20a%20Shared%20Expenses%20App/SCOPE.md)**: Details the database schema and tracks all CSV data anomalies resolved during import.
+2.  **[DECISIONS.md](file:///c:/Build%20a%20Shared%20Expenses%20App/DECISIONS.md)**: The engineering decision log outlining architectural choices, library comparisons, and system tradeoffs.
+3.  **[IMPORT_REPORT.md](file:///c:/Build%20a%20Shared%20Expenses%20App/IMPORT_REPORT.md)**: The actual ingestion report outputting anomaly findings, actions taken, and the resulting group balance netting.
+4.  **[AI_USAGE.md](file:///c:/Build%20a%20Shared%20Expenses%20App/AI_USAGE.md)**: A complete log of AI assistant utilization, key prompts, and three recovery cases where the AI erred and was corrected.
+
+## 🤖 AI Assistant Attribution
+
+This application was co-developed using **Antigravity**, an advanced agentic AI coding assistant designed by the **Google DeepMind** team.
+
+---
+
 ## 📜 License
 This project is licensed under the MIT License.
+
