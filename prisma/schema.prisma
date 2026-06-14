@@ -1,0 +1,237 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum SplitType {
+  EQUAL
+  UNEQUAL
+  PERCENTAGE
+  SHARES
+}
+
+enum ImportJobStatus {
+  PENDING
+  VALIDATING
+  NORMALIZING
+  ANOMALY_DETECTED
+  REVIEW_QUEUE
+  COMPLETED
+  FAILED
+  REJECTED
+}
+
+enum AnomalySeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum AnomalyStatus {
+  UNRESOLVED
+  RESOLVED
+  OVERRIDDEN
+  SKIPPED
+}
+
+enum AuditAction {
+  EXPENSE_CREATE
+  EXPENSE_UPDATE
+  EXPENSE_DELETE
+  SETTLEMENT_CREATE
+  SETTLEMENT_DELETE
+  GROUP_CREATE
+  GROUP_UPDATE
+  GROUP_MEMBERSHIP_CHANGE
+  IMPORT_JOB_CREATE
+  IMPORT_JOB_PROCESS
+  IMPORT_ROW_RESOLVE
+}
+
+model User {
+  id            String             @id @default(uuid())
+  name          String?
+  email         String             @unique
+  passwordHash  String
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+  
+  // Relations
+  memberships        GroupMembership[]
+  paidExpenses       Expense[]          @relation("ExpensePayer")
+  participations     ExpenseParticipant[]
+  sentSettlements    Settlement[]       @relation("SettlementPayer")
+  receivedSettlements Settlement[]      @relation("SettlementPayee")
+  auditLogs          AuditLog[]
+  importJobs         ImportJob[]
+  reviewedAnomalies  ImportAnomaly[]    @relation("AnomalyReviewer")
+}
+
+model Group {
+  id              String             @id @default(uuid())
+  name            String
+  description     String?
+  defaultCurrency String             @default("INR") // e.g. "INR", "USD"
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  
+  // Relations
+  memberships     GroupMembership[]
+  expenses        Expense[]
+  settlements     Settlement[]
+  importJobs      ImportJob[]
+}
+
+model GroupMembership {
+  id        String    @id @default(uuid())
+  groupId   String
+  userId    String
+  joinedAt  DateTime  @default(now())
+  leftAt    DateTime? // NULL means currently active
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  group     Group     @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([groupId, userId])
+  @@index([joinedAt, leftAt])
+}
+
+model Expense {
+  id          String               @id @default(uuid())
+  groupId     String
+  description String
+  amount      BigInt               // Stored in lowest currency unit (paise/cents)
+  currency    String               // e.g. "INR", "USD"
+  date        DateTime             // Expense occurrence date (UTC)
+  payerId     String
+  splitType   SplitType
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+  deletedAt   DateTime?            // Soft deletion support
+
+  group       Group                @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  payer       User                 @relation("ExpensePayer", fields: [payerId], references: [id])
+  participants ExpenseParticipant[]
+  auditLogs   AuditLog[]           @relation("ExpenseAudits")
+
+  @@index([groupId, date])
+}
+
+model ExpenseParticipant {
+  id          String   @id @default(uuid())
+  expenseId   String
+  userId      String
+  owedAmount  BigInt   // Share of expense in lowest unit
+  splitValue  Decimal  @db.Decimal(12, 4) // Stores percentage, share counts, or raw unequal amounts
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  expense     Expense  @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [id])
+
+  @@unique([expenseId, userId])
+}
+
+model Settlement {
+  id          String   @id @default(uuid())
+  groupId     String
+  payerId     String
+  payeeId     String
+  amount      BigInt   // Stored in lowest currency unit
+  currency    String
+  date        DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  group       Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  payer       User     @relation("SettlementPayer", fields: [payerId], references: [id])
+  payee       User     @relation("SettlementPayee", fields: [payeeId], references: [id])
+
+  @@index([groupId])
+}
+
+model ImportJob {
+  id          String           @id @default(uuid())
+  groupId     String
+  userId      String           // Uploaded by
+  fileName    String
+  status      ImportJobStatus  @default(PENDING)
+  rowCount    Int              @default(0)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  group       Group            @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user        User             @relation(fields: [userId], references: [id])
+  rows        ImportRow[]
+  anomalies   ImportAnomaly[]
+}
+
+model ImportRow {
+  id                 String          @id @default(uuid())
+  jobId              String
+  rowNumber          Int
+  rawData            Json            // Raw CSV string values as a key-value object
+  status             AnomalyStatus   @default(UNRESOLVED)
+  normalizedExpense  Json?           // Pre-processed standard JSON mapping
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+
+  job                ImportJob       @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  anomalies          ImportAnomaly[]
+
+  @@unique([jobId, rowNumber])
+}
+
+model ImportAnomaly {
+  id            String          @id @default(uuid())
+  jobId         String
+  rowNumber     Int
+  rowId         String
+  type          String          // Anomaly identifier code
+  severity      AnomalySeverity
+  message       String
+  originalValue String?
+  suggestedFix  String?
+  status        AnomalyStatus   @default(UNRESOLVED)
+  actionTaken   String?
+  reviewedById  String?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  job           ImportJob       @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  row           ImportRow       @relation(fields: [rowId], references: [id], onDelete: Cascade)
+  reviewer      User?           @relation("AnomalyReviewer", fields: [reviewedById], references: [id])
+
+  @@index([jobId, status])
+}
+
+model ExchangeRate {
+  id           String   @id @default(uuid())
+  fromCurrency String
+  toCurrency   String
+  rate         Decimal  @db.Decimal(12, 6) // High precision numeric decimal
+  date         DateTime // Effective date of rate
+
+  @@unique([fromCurrency, toCurrency, date])
+}
+
+model AuditLog {
+  id          String      @id @default(uuid())
+  userId      String?
+  action      AuditAction
+  entityName  String      // e.g. "Expense", "Settlement"
+  entityId    String
+  oldValues   Json?
+  newValues   Json?
+  createdAt   DateTime    @default(now())
+
+  user        User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  expense     Expense?    @relation("ExpenseAudits", fields: [entityId], references: [id], map: "AuditLog_entityId_fkey_Expense", onDelete: Cascade)
+}
